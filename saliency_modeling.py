@@ -28,8 +28,8 @@ parser.add_argument('--mode', type=str, default='train', help='Selecting running
 parser.add_argument('--img_dir', type=str, default=None, help='Directory to the image data')
 parser.add_argument('--fix_dir', type=str, default=None, help='Directory to the raw fixation file')
 parser.add_argument('--anno_dir', type=str, default=None, help='Directory to the saliency maps')
-parser.add_argument('--width', type=int, default=320, help='Width of input data')
-parser.add_argument('--height', type=int, default=240, help='Height of input data')
+parser.add_argument('--width', type=int, default=640, help='Width of input data')
+parser.add_argument('--height', type=int, default=480, help='Height of input data')
 parser.add_argument('--clip', type=float, default=-1, help='Gradient clipping')
 parser.add_argument('--batch', type=int, default=10, help='Batch size')
 parser.add_argument('--epoch', type=int, default=30, help='Number of epochs')
@@ -40,7 +40,7 @@ parser.add_argument('--checkpoint', type=str, default=None, help='Checkpoint pat
 parser.add_argument('--center_bias', type=bool, default=True, help='Adding center bias or not')
 parser.add_argument('--feat_dim', type=int, default=512, help='Feature dimension before the last layer')
 parser.add_argument('--use_proto', type=bool, default=False, help='using fractoization or not')
-parser.add_argument('--num_proto', type=int, default=1000, help='number of prototypes for factorization')
+parser.add_argument('--num_proto', type=int, default=512, help='number of prototypes for factorization')
 parser.add_argument('--weights', type=str, default=None, help='Weights to be loaded')
 parser.add_argument('--model', type=str, default=None, help='selection of saliency model')
 parser.add_argument('--second_phase', type=bool, default=False, help='Second phase training or not?')
@@ -51,7 +51,7 @@ args = parser.parse_args()
 
 transform = transforms.Compose([
                                 transforms.Resize((args.height,args.width)),
-                                transforms.ToTensor(), 
+                                transforms.ToTensor(),
                                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
                                 ])
 
@@ -73,26 +73,26 @@ def adjust_learning_rate(optimizer, epoch):
 def training():
     """ Main function for training different saliency models
     """
-    tf_summary_writer = tf.summary.create_file_writer(args.checkpoint)    
-    train_data = salicon(args.anno_dir, args.fix_dir, args.img_dir, args.width, 
+    tf_summary_writer = tf.summary.create_file_writer(args.checkpoint)
+    train_data = salicon(args.anno_dir, args.fix_dir, args.img_dir, args.width,
                         args.height, 'train', transform)
-    trainloader = torch.utils.data.DataLoader(train_data, batch_size=args.batch, 
-                        shuffle=True, num_workers=8)    
+    trainloader = torch.utils.data.DataLoader(train_data, batch_size=args.batch,
+                        shuffle=True, num_workers=8)
 
     test_data = salicon(args.anno_dir, args.fix_dir, args.img_dir, args.width,
                     args.height, 'val', transform)
-    testloader = torch.utils.data.DataLoader(test_data, batch_size=args.batch, 
+    testloader = torch.utils.data.DataLoader(test_data, batch_size=args.batch,
                     shuffle=False, num_workers=8)
 
     # model construction
     if args.model == 'dinet':
-        model = DINet(args.feat_dim, args.use_proto, args.num_proto, 
+        model = DINet(args.feat_dim, args.use_proto, args.num_proto,
                     args.second_phase, args.use_interaction)
     elif args.model == 'salicon':
-        model = SALICON(args.use_proto, args.num_proto, 
+        model = SALICON(args.use_proto, args.num_proto,
                     args.second_phase, args.use_interaction)
     elif args.model == 'transalnet':
-        model = TranSalNet(args.use_proto, args.num_proto, 
+        model = TranSalNet(args.use_proto, args.num_proto,
                         args.second_phase, args.use_interaction)
     else:
         assert 0, "model not yet supported"
@@ -103,7 +103,7 @@ def training():
 
     model = nn.DataParallel(model).cuda()
 
-    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, betas=(0.9, 0.999), 
+    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, betas=(0.9, 0.999),
                         eps=1e-08, weight_decay=1e-7) #1e-8
 
     def train(iteration):
@@ -155,7 +155,7 @@ def training():
                 kld_score.append(cal_kld_score(cur_pred, sal_map[j]))
                 nss_score.append(cal_nss_score(cur_pred, fix[j]))
                 auc_score.append(cal_auc_score(cur_pred, fix[j]))
- 
+
         with tf_summary_writer.as_default():
             tf.summary.scalar('NSS', np.mean(nss_score), step=iteration)
             tf.summary.scalar('CC', np.mean(cc_score), step=iteration)
@@ -166,7 +166,7 @@ def training():
 
         return np.mean(cc_score)
 
-    iteration = 0 
+    iteration = 0
     best_score = 0
     for epoch in range(args.epoch):
         adjust_learning_rate(optimizer, epoch+1)
@@ -182,7 +182,7 @@ def compute_threshold():
     """
     test_data = salicon(args.anno_dir, args.fix_dir, args.img_dir, args.width,
                     args.height, 'val', transform)
-    testloader = torch.utils.data.DataLoader(test_data, batch_size=args.batch, 
+    testloader = torch.utils.data.DataLoader(test_data, batch_size=args.batch,
                     shuffle=False, num_workers=8)
 
     # loading the model
@@ -206,7 +206,7 @@ def compute_threshold():
         for interval in np.linspace(0.01, 1, 100):
             interval = round(float(interval), 2)
             proto_freq[proto_idx][interval] = 0
-    total = 0 
+    total = 0
 
     with torch.no_grad():
         # first compute the proto-specific activation for each image
@@ -240,7 +240,7 @@ def interaction_analysis():
     """
     test_data = salicon(args.anno_dir, args.fix_dir, args.img_dir, args.width,
                     args.height, 'val', transform)
-    testloader = torch.utils.data.DataLoader(test_data, batch_size=args.batch, 
+    testloader = torch.utils.data.DataLoader(test_data, batch_size=args.batch,
                     shuffle=False, num_workers=8)
 
     # loading the model (remember to change the settings of model)
@@ -281,7 +281,7 @@ def interaction_analysis():
                 cur_att = att_map[i].data.cpu()
                 cur_proto = proto_sim[i]
                 tmp_proto_att = torch.mm(
-                                torch.mm(cur_proto, cur_att), 
+                                torch.mm(cur_proto, cur_att),
                                     cur_proto.transpose(1,0))
 
                 # normalize the interaction
@@ -302,7 +302,7 @@ def interaction_analysis():
                 cc_score.append(cal_cc_score(cur_att, sal_map[i]))
                 sim_score.append(cal_sim_score(cur_att, sal_map[i]))
                 kld_score.append(cal_kld_score(cur_att, sal_map[i]))
-                nss_score.append(cal_nss_score(cur_att, fix[i]))                
+                nss_score.append(cal_nss_score(cur_att, fix[i]))
 
     # save the prototype-wise interaction
     proto_att /= (proto_att.max(-1, keepdim=True)[0]+1e-15)
@@ -320,14 +320,3 @@ elif args.mode == 'compute_threshold':
     compute_threshold()
 elif args.mode == 'interaction_analysis':
     interaction_analysis()
-
-
-
-
-
-
-
-
-
-
-

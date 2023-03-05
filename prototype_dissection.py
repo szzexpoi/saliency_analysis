@@ -23,11 +23,10 @@ parser.add_argument('--img_dir', type=str, default=None, help='Directory to imag
 parser.add_argument('--sg_dir', type=str, default=None, help='Directory to scene graph annotation')
 parser.add_argument('--weights', type=str, default=None, help='Trained model to be loaded (default: None)')
 parser.add_argument('--batch_size', type=int, default=32, help='Defining batch size for training (default: 150)')
-parser.add_argument('--num_proto', type=int, default=1000, help='Number of prototype')
+parser.add_argument('--num_proto', type=int, default=512, help='Number of prototype')
 parser.add_argument('--model', type=str, default='dinet', help='model to be analyzed')
 parser.add_argument('--threshold', type=float, default=0.8, help='threshold for map binarization')
 parser.add_argument('--adaptive', type=bool, default=True, help='using adaptive threshold or not')
-parser.add_argument('--dataset', type=str, default='broden', help='Dataset used for networkdissection (broden or vg)')
 
 args = parser.parse_args()
 
@@ -50,7 +49,7 @@ def prototype_dissection():
     segmentation in the Visual Genome dataset.
     """
     probe_data = VG_generator(args.img_dir, args.sg_dir)
-    probe_loader = torch.utils.data.DataLoader(probe_data, batch_size=args.batch_size, 
+    probe_loader = torch.utils.data.DataLoader(probe_data, batch_size=args.batch_size,
                                     shuffle=True, num_workers=4)
 
     # load fully trained model (partial weights)
@@ -76,7 +75,7 @@ def prototype_dissection():
         adaptive_threshold = dict()
         for proto_idx in proto_distribution:
             accumulated_prob = 0
-            tmp_threshold = 0 
+            tmp_threshold = 0
             for idx, threshold in enumerate(proto_distribution[proto_idx]):
                 accumulated_prob += proto_distribution[proto_idx][threshold]
                 if accumulated_prob>=args.threshold or idx==len(proto_distribution[proto_idx])-2:
@@ -84,7 +83,7 @@ def prototype_dissection():
                     break
             adaptive_threshold[int(proto_idx)] = tmp_threshold
 
-    # alignment score between 
+    # alignment score between
     proto2concept = [{} for _ in range(args.num_proto)]
 
     start = time.time()
