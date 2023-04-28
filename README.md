@@ -39,20 +39,8 @@ python saliency_modeling.py --img_dir $VG_IMG --sg_dir $VG_graph --weights $CKPT
 ```
 where **VG_IMG**, **VG_graph** are directories to the images and scene graphs for Visual Genome dataset.
 
-### Analyzing the Interactions
-For studying the spatial- and semantic-level interactions for saliency prediction, self-attention needs to be introduced during the reformulation of saliency prediction:
-```
-python saliency_modeling.py --mode train --img_dir $IMG_DIR --fix_dir $FIX_DIR --anno_dir $SAL_DIR --checkpoint $CKPT_Transformer --use_proto 1 --model dinet --second_phase 1 --use_interaction 1 --weights $CKPT/model_best.pth
-```
-where **$CKPT_Transformer** is the directory for storing the checkpoint for interaction analysis.
-
-To measure alignment between spatial interactions and saliency distribution:
-```
-python saliency_modeling.py --mode interaction_analysis --img_dir $IMG_DIR --fix_dir $FIX_DIR --anno_dir $SAL_DIR --use_proto 1 --model dinet --use_interaction 1 --weights $CKPT_Transformer/model_best.pth
-```
-
 ### Quantifying Contributions of Semantics
-After running the aforementioned steps or downloading intermediate results from our drive, you can follow the Jupyter Notebook to compute the quantitative contributions (and interactions) of semantics.
+After running the aforementioned steps or downloading intermediate results from our drive, you can follow the Jupyter Notebook to compute the quantitative contributions of semantics.
 
 ### Reference
 If you use our code or data, please cite our paper:

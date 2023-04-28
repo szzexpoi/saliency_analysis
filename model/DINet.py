@@ -13,24 +13,24 @@ class Inception_Encoder(nn.Module):
 	"""
 	def __init__(self, input_size, embedding_size):
 		super(Inception_Encoder, self).__init__()
-		self.inception_1 = nn.Conv2d(input_size, embedding_size, kernel_size=1, 
+		self.inception_1 = nn.Conv2d(input_size, embedding_size, kernel_size=1,
 								padding="same", stride=1, dilation=1, bias=False)
-		self.inception_2 = nn.Conv2d(embedding_size, embedding_size, kernel_size=3, 
+		self.inception_2 = nn.Conv2d(embedding_size, embedding_size, kernel_size=3,
 								padding="same", stride=1, dilation=4, bias=False)
-		self.inception_3 = nn.Conv2d(embedding_size, embedding_size, kernel_size=3, 
+		self.inception_3 = nn.Conv2d(embedding_size, embedding_size, kernel_size=3,
 								padding="same", stride=1, dilation=8, bias=False)
-		self.inception_4 = nn.Conv2d(embedding_size, embedding_size, kernel_size=3, 
+		self.inception_4 = nn.Conv2d(embedding_size, embedding_size, kernel_size=3,
 								padding="same", stride=1, dilation=16, bias=False)
 
 	def forward(self, x):
 		""" Implementation of the inception data flow proposed
-			in the DINet paper. Note that three of the branches 
+			in the DINet paper. Note that three of the branches
 			are conditioned on the first conv layer, and there is
 			a sum fusion along side the independent branches.
 
 			Input:
 				x: A Batch x N x H x W tensor encoding the visual
-				features extracted from the backbone, where N is 
+				features extracted from the backbone, where N is
 				the number of filters for the features.
 			Return:
 				A Batch x M x H x W tensor encoding the features
@@ -53,23 +53,23 @@ class Simple_Decoder(nn.Module):
 
 	def __init__(self, input_size, embedding_size):
 		super(Simple_Decoder, self).__init__()
-		self.decoder_1 = nn.Conv2d(input_size, embedding_size, kernel_size=3, 
+		self.decoder_1 = nn.Conv2d(input_size, embedding_size, kernel_size=3,
 						padding="same", stride=1, bias=False)
-		self.decoder_2 = nn.Conv2d(embedding_size, embedding_size, kernel_size=3, 
+		self.decoder_2 = nn.Conv2d(embedding_size, embedding_size, kernel_size=3,
 						padding="same", stride=1, bias=False)
-		self.decoder_3= nn.Conv2d(embedding_size, 1, kernel_size=3, 
+		self.decoder_3= nn.Conv2d(embedding_size, 1, kernel_size=3,
 						padding="same", stride=1, bias=False)
 
 	def forward(self, x):
-		""" A standard feed-forward flow of decoder. 
-			Note that at the end there is a rescaling 
+		""" A standard feed-forward flow of decoder.
+			Note that at the end there is a rescaling
 			operation.
 		"""
 
 		x = torch.relu(self.decoder_1(x))
 		x = torch.relu(self.decoder_2(x))
 		x = torch.sigmoid(self.decoder_3(x))
-		x = F.interpolate(x,(480, 640)) 
+		x = F.interpolate(x,(480, 640))
 
 		return x
 
@@ -77,43 +77,35 @@ class Proto_Decoder(nn.Module):
 	""" Decoder with factorized prototypes
 	"""
 
-	def __init__(self, input_size, embedding_size, 
-				num_proto=1000, second_phase=False, use_interaction=False):
+	def __init__(self, input_size, embedding_size,
+				num_proto=1000, second_phase=False):
 		super(Proto_Decoder, self).__init__()
 		self.num_proto = num_proto
 		self.embedding_size = embedding_size
 		self.second_phase = second_phase
-		self.use_interaction = use_interaction
-		self.v_decoder = nn.Conv2d(input_size, embedding_size, kernel_size=3, 
+		self.v_decoder = nn.Conv2d(input_size, embedding_size, kernel_size=3,
 						padding="same", stride=1, bias=False)
 		# projecting visual features onto the probability of prototypes
 		self.prototype = nn.Linear(embedding_size, num_proto, bias=False)
 
-		if not use_interaction:
-			if not second_phase:
-				self.sal_decoder= nn.Conv2d(embedding_size, 1, kernel_size=3, 
-								padding="same", stride=1, bias=False)
-			else:
-				# use a different layer name for partial weight loading
-				self.sal_decoder_1= nn.Conv2d(num_proto, 1, kernel_size=3, 
-								padding="same", stride=1, bias=False) 
+		if not second_phase:
+			self.sal_decoder= nn.Conv2d(embedding_size, 1, kernel_size=3,
+							padding="same", stride=1, bias=False)
 		else:
-			# self-attention for probing long-term dependency
-			self.sal_query = nn.Linear(num_proto, 256)
-			self.sal_key = nn.Linear(num_proto, 256)		
-			self.sal_decoder_1= nn.Conv2d(num_proto, 1, kernel_size=1, 
-							padding="same", stride=1, bias=False) 
+			# use a different layer name for partial weight loading
+			self.sal_decoder_1= nn.Conv2d(num_proto, 1, kernel_size=3,
+							padding="same", stride=1, bias=False)
 
 		# for fine-tuning (second phase)
-		if second_phase or use_interaction:
+		if second_phase:
 			for module in [self.v_decoder, self.prototype]:
 				for para in module.parameters():
-					para.requires_grad = False	
+					para.requires_grad = False
 
 
 	def forward(self, x, probe=False):
-		""" A standard feed-forward flow of decoder. 
-			Note that at the end there is a rescaling 
+		""" A standard feed-forward flow of decoder.
+			Note that at the end there is a rescaling
 			operation.
 		"""
 
@@ -122,48 +114,35 @@ class Proto_Decoder(nn.Module):
 		x = x.view(batch, c, h*w)
 		proto_sim = torch.sigmoid(self.prototype(x.transpose(1, 2)))
 
-		if self.use_interaction:
-			# Transformer-based attention
-			query = self.sal_query(proto_sim)
-			key = self.sal_key(proto_sim)
-			self_att = torch.bmm(query, key.transpose(1, 2))
-			self_att = F.softmax(self_att, dim=-1)
-			x = torch.bmm(self_att, proto_sim)
+		if not self.second_phase:
+			x = torch.bmm(proto_sim, self.prototype.weight.unsqueeze(0).expand(
+								batch, self.num_proto, self.embedding_size))
 		else:
-			if not self.second_phase:
-				x = torch.bmm(proto_sim, self.prototype.weight.unsqueeze(0).expand(
-									batch, self.num_proto, self.embedding_size))
-			else:
-				x = proto_sim
+			x = proto_sim
 
 		x = x.transpose(1, 2).view(batch, -1, h, w)
 
 		if probe:
-			if not self.use_interaction:
-				# for analysis, only extracting prototype activation
-				return proto_sim.transpose(1, 2).view(batch, -1, h, w)
-			else:
-				# for analysis of interaction
-				proto_sim = proto_sim.transpose(1, 2)
-				return proto_sim, self_att
+			# for analysis, only extracting prototype activation
+			return proto_sim.transpose(1, 2).view(batch, -1, h, w)
 
 		else:
 			if not self.second_phase:
 				x = torch.sigmoid(self.sal_decoder(x))
 			else:
 				x = torch.sigmoid(self.sal_decoder_1(x))
-			x = F.interpolate(x,(480, 640)) # for SALICON 
+			x = F.interpolate(x,(480, 640)) # for SALICON
 
 			return x
 
 
 class DINet(nn.Module):
-	""" A reimplementation of the saliency prediction model 
+	""" A reimplementation of the saliency prediction model
 		introduced in the following paper:
 		https://arxiv.org/abs/1904.03571
 	"""
-	def __init__(self, embedding_size, use_proto=False, 
-				num_proto=1000, second_phase=False, use_interaction=False):
+	def __init__(self, embedding_size, use_proto=False,
+				num_proto=1000, second_phase=False):
 		super(DINet, self).__init__()
 		self.dilated_backbone = resnet50(pretrained=True)
 		self.dilate_resnet(self.dilated_backbone) # DINet use the same Dilated ResNet as SAM
@@ -173,15 +152,15 @@ class DINet(nn.Module):
 		if not use_proto:
 			self.decoder = Simple_Decoder(embedding_size*4, embedding_size)
 		else:
-			self.decoder = Proto_Decoder(embedding_size*4, 
-									embedding_size, num_proto, second_phase, use_interaction)
+			self.decoder = Proto_Decoder(embedding_size*4,
+									embedding_size, num_proto, second_phase)
 
 		if second_phase:
 			for module in [self.dilated_backbone, self.encoder]:
 				for para in module.parameters():
-					para.requires_grad = False	
+					para.requires_grad = False
 
-	def dilate_resnet(self, resnet): 
+	def dilate_resnet(self, resnet):
 		""" Converting standard ResNet50 into a dilated one.
 		"""
 		resnet.layer3[0].conv1.stride = 1
@@ -199,7 +178,7 @@ class DINet(nn.Module):
 
 	def forward(self, image, probe=False):
 		""" Data flow for DINet. Most of the key
-			components have been implemented in 
+			components have been implemented in
 			separate modules.
 		"""
 

@@ -44,7 +44,6 @@ parser.add_argument('--num_proto', type=int, default=512, help='number of protot
 parser.add_argument('--weights', type=str, default=None, help='Weights to be loaded')
 parser.add_argument('--model', type=str, default=None, help='selection of saliency model')
 parser.add_argument('--second_phase', type=bool, default=False, help='Second phase training or not?')
-parser.add_argument('--use_interaction', type=bool, default=False, help='For analyzing interaction or not?')
 
 args = parser.parse_args()
 
@@ -87,13 +86,13 @@ def training():
     # model construction
     if args.model == 'dinet':
         model = DINet(args.feat_dim, args.use_proto, args.num_proto,
-                    args.second_phase, args.use_interaction)
+                    args.second_phase)
     elif args.model == 'salicon':
         model = SALICON(args.use_proto, args.num_proto,
-                    args.second_phase, args.use_interaction)
+                    args.second_phase)
     elif args.model == 'transalnet':
         model = TranSalNet(args.use_proto, args.num_proto,
-                        args.second_phase, args.use_interaction)
+                        args.second_phase)
     else:
         assert 0, "model not yet supported"
 
@@ -187,11 +186,11 @@ def compute_threshold():
 
     # loading the model
     if args.model == 'dinet':
-        model = DINet(args.feat_dim, args.use_proto, args.num_proto, False, False)
+        model = DINet(args.feat_dim, args.use_proto, args.num_proto, False)
     elif args.model == 'salicon':
-        model = SALICON(args.use_proto, args.num_proto, False, False)
+        model = SALICON(args.use_proto, args.num_proto, False)
     elif args.model == 'transalnet':
-        model = TranSalNet(args.use_proto, args.num_proto, False, False)
+        model = TranSalNet(args.use_proto, args.num_proto, False)
     else:
         assert 0, "model not yet supported"
 
@@ -233,90 +232,7 @@ def compute_threshold():
     with open('./proto_distribution_sal_'+args.model+'.json', 'w') as f:
         json.dump(proto_freq, f)
 
-
-def interaction_analysis():
-    """ Analyzing the interaction with
-        prototype matching and global self-attention.
-    """
-    test_data = salicon(args.anno_dir, args.fix_dir, args.img_dir, args.width,
-                    args.height, 'val', transform)
-    testloader = torch.utils.data.DataLoader(test_data, batch_size=args.batch,
-                    shuffle=False, num_workers=8)
-
-    # loading the model (remember to change the settings of model)
-    model = DINet(args.feat_dim, True, args.num_proto, True, True)
-    model.load_state_dict(torch.load(args.weights), strict=True)
-    model = nn.DataParallel(model).cuda()
-    model.eval()
-
-    # computing the average attention pattern
-    avg_att = torch.zeros(1200, 1200)
-    total = 0
-
-    # recording the dependencies between prototypes
-    proto_att = torch.zeros(args.num_proto, args.num_proto)
-
-    # recording evaluation score
-    nss_score = []
-    cc_score = []
-    auc_score = []
-    sim_score = []
-    kld_score = []
-
-    with torch.no_grad():
-        # first compute the proto-specific activation for each image
-        for idx, (img, sal_map, fix, img_id) in enumerate(testloader):
-            img = img.cuda()
-            fix = fix.data.cpu().numpy()
-            sal_map = sal_map.data.cpu().numpy()
-            proto_sim, att_map = model(img, probe=True) # batch x proto x h x w
-
-            # binarize the prototype matching results (with latter steps)
-            proto_sim = proto_sim.data.cpu()
-            proto_sim[proto_sim<=args.threshold] = 0
-            proto_sim[proto_sim>args.threshold] = 1
-
-            # compute the prototype-wise interactions
-            for i in range(len(img)):
-                cur_att = att_map[i].data.cpu()
-                cur_proto = proto_sim[i]
-                tmp_proto_att = torch.mm(
-                                torch.mm(cur_proto, cur_att),
-                                    cur_proto.transpose(1,0))
-
-                # normalize the interaction
-                tmp_proto_att = tmp_proto_att/(tmp_proto_att.sum(-1, keepdim=True)+1e-15)
-                proto_att += tmp_proto_att
-
-            # measuring the alignment between aggregated attention and saliency maps
-            for i in range(len(img)):
-                # filtering the interaction only for salient regions
-                cur_att = att_map[i].data.cpu().numpy()
-                resize_sal_map = cv2.resize(sal_map[i], (80, 60))
-                cur_att = (cur_att*resize_sal_map.reshape([-1, 1])).sum(0)
-                cur_att = cur_att.reshape([60, 80])
-                cur_att = cv2.resize(cur_att, (640, 480))
-                cur_att /= (cur_att.max()+1e-5)
-
-                cur_att = add_center_bias(cur_att)
-                cc_score.append(cal_cc_score(cur_att, sal_map[i]))
-                sim_score.append(cal_sim_score(cur_att, sal_map[i]))
-                kld_score.append(cal_kld_score(cur_att, sal_map[i]))
-                nss_score.append(cal_nss_score(cur_att, fix[i]))
-
-    # save the prototype-wise interaction
-    proto_att /= (proto_att.max(-1, keepdim=True)[0]+1e-15)
-    torch.save(proto_att, 'prototype_interaction.pt')
-
-    # print saliency scores
-    print('NSS:', np.mean(nss_score))
-    print('CC:', np.mean(cc_score))
-    print('KLD:', np.mean(kld_score))
-    print('SIM:', np.mean(sim_score))
-
 if args.mode == 'train':
     training()
 elif args.mode == 'compute_threshold':
     compute_threshold()
-elif args.mode == 'interaction_analysis':
-    interaction_analysis()

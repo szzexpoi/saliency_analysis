@@ -54,11 +54,11 @@ def prototype_dissection():
 
     # load fully trained model (partial weights)
     if args.model == 'dinet':
-        model = DINet(256, True, args.num_proto, False, False)
+        model = DINet(256, True, args.num_proto, False)
     elif args.model == 'salicon':
-        model = SALICON(True, args.num_proto, False, False)
+        model = SALICON(True, args.num_proto, False)
     elif args.model == 'transalnet':
-        model = TranSalNet(True, args.num_proto, False, False).cuda()
+        model = TranSalNet(True, args.num_proto, False).cuda()
     else:
         assert 0, 'model not supported for analysis yet'
 
