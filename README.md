@@ -57,5 +57,11 @@ After running the aforementioned steps or downloading intermediate results from 
 ### Reference
 If you use our code or data, please cite our paper:
 ```
-TBD
+@inproceedings{saliency_analysis_nips23,
+ author = {Chen, Shi and Jiang, Ming and Zhao, Qi},
+ booktitle = {Advances in Neural Information Processing Systems},
+ title = {What Do Deep Saliency Models Learn about Visual Attention?},
+ year = {2023}
+}
+
 ```
