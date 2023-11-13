@@ -52,7 +52,7 @@ python saliency_modeling.py --mode interaction_analysis --img_dir $IMG_DIR --fix
 ```
 
 ### Quantifying Contributions of Semantics
-After running the aforementioned steps or downloading intermediate results from our drive, you can follow the Jupyter Notebook to compute the quantitative contributions (and interactions) of semantics.
+After running the aforementioned steps or downloading intermediate results from our drive, you can follow the Jupyter Notebook to compute the quantitative contributions of semantics.
 
 ### Reference
 If you use our code or data, please cite our paper:
