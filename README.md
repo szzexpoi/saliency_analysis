@@ -35,7 +35,7 @@ python saliency_modeling.py --mode compute_threshold --img_dir $IMG_DIR --fix_di
 ### Prototype Dissection
 A key component of our framework is to associate implicit features with interpretable semantics, which is through analyzing the alignment between probabilistic distribution of bases and segmentation in Visual Genome:
 ```
-python saliency_modeling.py --img_dir $VG_IMG --sg_dir $VG_graph --weights $CKPT/model_best.pth --model dinet
+python prototype_dissection.py --img_dir $VG_IMG --sg_dir $VG_graph --weights $CKPT/model_best.pth --model dinet
 ```
 where **VG_IMG**, **VG_graph** are directories to the images and scene graphs for Visual Genome dataset.
 
